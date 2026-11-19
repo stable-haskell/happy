@@ -37,6 +37,7 @@ Produce the complete output file.
 >               -> Maybe String                 -- module header
 >               -> Maybe String                 -- module trailer
 >               -> Bool                         -- use coercions
+>               -> Bool                         -- use ghc extensions
 >               -> Bool                         -- strict parser
 >               -> String
 
@@ -62,7 +63,7 @@ Produce the complete output file.
 >               , error_expected = error_expected'
 >               })
 >               action goto lang_exts module_header module_trailer
->               coerce strict
+>               coerce ghc strict
 >     = ( top_opts
 >       . maybestr module_header . nl
 >       . str comment
@@ -97,7 +98,8 @@ We used to emit tabs for indentation, but since 2.0.0.1 we use 8 spaces for back
 >    indentStr = "        "
 >    indent = str indentStr
 
->    intMaybeHash    = str "Happy_GHC_Exts.Int#"
+>    intMaybeHash | ghc       = str "Happy_GHC_Exts.Int#"
+>                 | otherwise = str "Happy_Prelude.Int"
 
 >    -- Parsing monad and its constraints
 >    pty = str monad_tycon                     -- str "P"
@@ -352,7 +354,7 @@ The token conversion function.
 >       = str "happyTerminalToTok term = case term of {\n" . indent
 >       . (case lexer' of Just (_, eof') -> str eof' . str " -> " . eofTok . str ";\n" . indent; _ -> id)
 >       . interleave (";\n" ++ indentStr) (map doToken token_rep)
->       . str "_ -> -1#;\n" . indent . str "}\n" -- token number -1# (INVALID_TOK) signals an invalid token
+>       . (if ghc then str "_ -> -1#;\n" else str "_ -> (-1);\n") . indent . str "}\n" -- token number -1 (INVALID_TOK) signals an invalid token
 >       . str "{-# NOINLINE happyTerminalToTok #-}\n"
 >       . str "\n" .
 >       (case lexer' of {
@@ -485,6 +487,7 @@ machinery to discard states in the parser...
 action array indexed by (terminal * last_state) + state
 
 >    produceActionArray
+>       | ghc
 >           = str "happyActOffsets :: HappyAddr\n"
 >           . str "happyActOffsets = HappyA# \"" --"
 >           . hexChars act_offs
@@ -509,6 +512,39 @@ action array indexed by (terminal * last_state) + state
 >           . str "happyTable = HappyA# \"" --"
 >           . hexChars table
 >           . str "\"#\n\n" --"
+>       | otherwise
+>           = str "happyActOffsets :: HappyAddr\n"
+>           . str "happyActOffsets = HappyA (Happy_Data_Array.listArray (0,"
+>               . shows (length act_offs - 1) . str ") (["
+>           . interleave' "," (map showsPortableInt act_offs)
+>           . str "\n\t]))\n\n"
+>
+>           . str "happyGotoOffsets :: HappyAddr\n"
+>           . str "happyGotoOffsets = HappyA (Happy_Data_Array.listArray (0,"
+>               . shows (length goto_offs - 1) . str ") (["
+>           . interleave' "," (map showsPortableInt goto_offs)
+>           . str "\n\t]))\n\n"
+>
+>           . str "happyAdjustOffset :: Happy_Prelude.Int -> Happy_Prelude.Int\n"
+>           . str "happyAdjustOffset = Happy_Prelude.id\n\n"
+>
+>           . str "happyDefActions :: HappyAddr\n"
+>           . str "happyDefActions = HappyA (Happy_Data_Array.listArray (0,"
+>               . shows (length defaults - 1) . str ") (["
+>           . interleave' "," (map showsPortableInt defaults)
+>           . str "\n\t]))\n\n"
+>
+>           . str "happyCheck :: HappyAddr\n"
+>           . str "happyCheck = HappyA (Happy_Data_Array.listArray (0,"
+>               . shows table_size . str ") (["
+>           . interleave' "," (map showsPortableInt check)
+>           . str "\n\t]))\n\n"
+>
+>           . str "happyTable :: HappyAddr\n"
+>           . str "happyTable = HappyA (Happy_Data_Array.listArray (0,"
+>               . shows table_size . str ") (["
+>           . interleave' "," (map showsPortableInt table)
+>           . str "\n\t]))\n\n"
 
 >    n_terminals = length terms
 >    n_nonterminals = length nonterms - n_starts -- lose %starts
@@ -516,6 +552,8 @@ action array indexed by (terminal * last_state) + state
 >    (act_offs,goto_offs,table,defaults,check,catch_states)
 >       = mkTables action goto first_nonterm' fst_term
 >               n_terminals n_nonterminals n_starts
+>
+>    table_size = length table - 1
 >
 >    produceReduceArray
 >       = str "happyReduceArr = Happy_Data_Array.array ("
@@ -527,10 +565,17 @@ action array indexed by (terminal * last_state) + state
 >       . str "\n" . indent . str "]\n\n"
 >
 >    produceRuleArray -- rule number to (non-terminal number, rule length)
->       = str "happyRuleArr :: HappyAddr\n"
->       . str "happyRuleArr = HappyA# \"" -- "
->       . hexChars (concatMap (\(nt,len) -> [nt,len]) ruleArrElems)
->       . str "\"#\n\n" --"
+>       | ghc
+>           = str "happyRuleArr :: HappyAddr\n"
+>           . str "happyRuleArr = HappyA# \"" -- "
+>           . hexChars (concatMap (\(nt,len) -> [nt,len]) ruleArrElems)
+>           . str "\"#\n\n" --"
+>       | otherwise
+>           = str "happyRuleArr :: HappyAddr\n"
+>           . str "happyRuleArr = HappyA (Happy_Data_Array.listArray (0,"
+>               . shows (2 * (n_rules - n_starts + 1) - 1) . str ") (["
+>           . interleave' "," (map showsPortableInt (concatMap (\(nt,len) -> [nt,len]) ruleArrElems))
+>           . str "\n\t]))\n\n" --"
 >
 >    ruleArrElems = map (\(Production nt toks _code _prio) -> (getName nt - getName first_nonterm',length toks)) (drop n_starts prods)
 >
@@ -540,7 +585,13 @@ action array indexed by (terminal * last_state) + state
 >       = str "happyCatchStates :: [Happy_Prelude.Int]\n"
 >       . str "happyCatchStates = " . shows catch_states . str "\n\n"
 
->    showInt i = shows i . showChar '#'
+>    showInt i | ghc       = shows i . showChar '#'
+>              | otherwise = showsPortableInt i
+>
+>-- Portable Haskell 2010 Int literals: parenthesise negatives so the
+>-- output is valid even in pattern position (without NegativeLiterals).
+>    showsPortableInt i | i < 0     = str "(" . shows i . str ")"
+>                       | otherwise = shows i
 
 This lets examples like:
 
@@ -751,7 +802,7 @@ have a special code path for `OldExpected`.
 >       . str unmonad
 >       . str "happySomeParser where\n"
 >       . str " happySomeParser = happyThen (happyDoParse "
->       . shows no . str "#"
+>       . (if ghc then shows no . str "#" else shows no)
 >       . maybe_tks
 >       . str ") "
 >       . brack' (if coerce
@@ -797,7 +848,7 @@ have a special code path for `OldExpected`.
 >         . str "let { "
 >         . str "f = do_" . str name . str " toks; "
 >         . str "(conds,attrs) = f happyEmptyAttrs; "
->         . str "x = Happy_Prelude.foldr Happy_GHC_Exts.seq attrs conds; "
+>         . str "x = Happy_Prelude.foldr " . str (if ghc then "Happy_GHC_Exts.seq" else "Happy_Prelude.seq") . str " attrs conds; "
 >         . str "} in (". str defaultAttr . str " x)"
 
 ----------------------------------------------------------------------------

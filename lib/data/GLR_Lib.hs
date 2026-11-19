@@ -37,8 +37,8 @@
            )
   where
 
-#if !defined(__GLASGOW_HASKELL__)
-#  error This code isn't being built with GHC.
+#if defined(HAPPY_GHC) && !defined(__GLASGOW_HASKELL__)
+#  error `HAPPY_GHC` is defined but this code isn't being built with GHC.
 #endif
 
 import Data.Char
@@ -49,8 +49,10 @@ import Control.Monad (foldM, ap)
 import Data.Maybe (fromJust)
 import Data.List (insertBy, nub, maximumBy, partition, find, groupBy, delete)
 
+#ifdef HAPPY_GHC
 import GHC.Prim
 import GHC.Exts
+#endif
 
 #if defined(HAPPY_DEBUG)
 import System.IO
@@ -64,6 +66,7 @@ fakeimport DATA
 
 {- borrowed from GenericTemplate.hs -}
 
+#ifdef HAPPY_GHC
 #define ILIT(n) n#
 #define BANG !
 #define IBOX(n) (I# (n))
@@ -84,6 +87,23 @@ fakeimport DATA
 #define TIMES(n,m) (n *# m)
 #define NEGATE(n) (negateInt# (n))
 #define IF_GHC(x) (x)
+
+#else
+
+#define ILIT(n) (n)
+#define BANG
+#define IBOX(n) (n)
+#define FAST_INT Int
+#define ULT(n,m) (n < m)
+#define GTE(n,m) (n >= m)
+#define UEQ(n,m) (n == m)
+#define PLUS(n,m) (n + m)
+#define MINUS(n,m) (n - m)
+#define TIMES(n,m) (n * m)
+#define NEGATE(n) (negate (n))
+#define IF_GHC(x)
+
+#endif
 
 
 #if defined(HAPPY_DEBUG)

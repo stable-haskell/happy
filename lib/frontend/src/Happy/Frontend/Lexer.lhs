@@ -143,7 +143,7 @@ followed by a special identifier.
 >       'a':'t':'t':'r':'i':'b':'u':'t':'e':rest | end_of_id rest ->
 >               cont (TokenKW TokSpecId_Attribute) rest
 >       _ -> lexError ("unrecognised directive: %" ++
->                               takeWhile (not.isSpace) s) s
+>                               takeWhile (not . isSpace) s) s
 >    where
 >       end_of_id (c:_) = not (isAlphaNum c)
 >       end_of_id []    = True

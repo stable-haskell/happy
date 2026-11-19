@@ -157,15 +157,15 @@ Extract the string that comes before the module declaration...
 >   content base_defs
 >    = str (unlines
 >            [ "{-# LANGUAGE " ++ l ++ " #-}\n" | l <- lang_exts ])
->    . str (unlines $ maybe [] fst header_parts) .nl
+>    . str (unlines $ maybe [] fst header_parts) . nl
 >    . nl
->    . str (comment "data")                      .nl .nl
->    . str ("module " ++ data_mod ++ " where")   .nl
+>    . str (comment "data")                      . nl . nl
+>    . str ("module " ++ data_mod ++ " where")   . nl
 
 >     . nl
->     . maybestr (fmap (unlines.snd) header_parts) .nl
+>     . maybestr (fmap (unlines . snd) header_parts) . nl
 >     . nl
->     . str base_defs .nl
+>     . str base_defs . nl
 >     . nl
 
 >    . let count_nls     = length . filter (=='\n')
@@ -182,22 +182,22 @@ Extract the string that comes before the module declaration...
 >       . nl
 >       . nl
 >       . maybestr trailer
->       .nl
->       .nl
+>       . nl
+>       . nl
 >       . str ("{-# LINE " ++ show post_trailer ++ " "
 >                          ++ show (basename ++ "Data.hs") ++ "#-}")
 >       . nl
 >       . nl
 
->     . mkGSymbols g pragmas .nl
+>     . mkGSymbols g pragmas . nl
 >     . nl
->     . sem_def                     .nl
+>     . sem_def                     . nl
 >     . nl
->     . mkSemObjects  options (monad_sub pragmas) sem_info  .nl
+>     . mkSemObjects  options (monad_sub pragmas) sem_info  . nl
 >     . nl
->     . mkDecodeUtils options (monad_sub pragmas) sem_info  .nl
+>     . mkDecodeUtils options (monad_sub pragmas) sem_info  . nl
 >     . nl
->     . user_def_token_code (token_type pragmas)            .nl
+>     . user_def_token_code (token_type pragmas)            . nl
 >     . nl
 >     . table_text
 
@@ -349,7 +349,7 @@ Do the same with the Happy goto table.
 
 > writeGotoTbl :: GotoTable -> [(Name,String)] -> GhcExts -> ShowS
 > writeGotoTbl goTbl gsMap exts
->  = interleave "\n" (map str $ filter (not.null) mkLines)
+>  = interleave "\n" (map str $ filter (not . null) mkLines)
 >  . str errorLine . nl
 >  where
 >   name    = "goto"
